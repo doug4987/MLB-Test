@@ -116,7 +116,7 @@ This is a complete, automated MLB props betting system that:
 - Supports 20+ different market types
 - Calculates actual results vs betting lines
 - High confidence auto-resolution (95%)
-- Player name mapping system
+- Player name mapping system (stored in `player_name_mapping` table)
 
 **Supported Markets**:
 - Batting: Hits, Runs, RBIs, Home Runs, Doubles, Triples, Singles

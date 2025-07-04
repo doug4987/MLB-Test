@@ -190,9 +190,10 @@ CREATE TABLE plus_ev_bets (
 -- Player name mapping (CRITICAL: must have mapping_type column)
 CREATE TABLE player_name_mapping (
     id INTEGER PRIMARY KEY,
-    canonical_name TEXT,
-    variant_name TEXT,
-    mapping_type TEXT,  -- THIS COLUMN WAS MISSING INITIALLY
+    betting_name TEXT NOT NULL,
+    mlb_name TEXT NOT NULL,
+    team TEXT,
+    mapping_type TEXT,  -- e.g. 'manual' or 'auto'
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
