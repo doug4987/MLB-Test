@@ -120,19 +120,8 @@ class EnhancedBetResolver:
     
     def _get_mapped_player_name(self, betting_name: str, team: str) -> str:
         """Get the MLB name for a betting name using name mappings"""
-        with self.db.get_connection() as conn:
-            cursor = conn.execute("""
-                SELECT mlb_name FROM player_name_mapping 
-                WHERE betting_name = ? AND (team = ? OR team IS NULL)
-                ORDER BY team DESC  -- Prefer team-specific mappings
-                LIMIT 1
-            """, (betting_name, team))
-            
-            result = cursor.fetchone()
-            if result:
-                return result[0]
-            else:
-                return betting_name  # Return original if no mapping found
+        mapped = self.db.get_mlb_name_for_betting_name(betting_name, team)
+        return mapped if mapped else betting_name
     
     def _normalize_player_key(self, player_name: str, team: str) -> str:
         """Create normalized key for player matching"""
@@ -153,11 +142,18 @@ class EnhancedBetResolver:
             
             # Try to find matching box score - first with original name, then with mapped name
             key = self._normalize_player_key(player_name, team)
-            
+
             if key not in box_score_lookup:
                 # Try using name mapping
                 mapped_name = self._get_mapped_player_name(player_name, team)
                 if mapped_name != player_name:
+                    # Store mapping for future use
+                    self.db.add_player_name_mapping(
+                        betting_name=player_name,
+                        mlb_name=mapped_name,
+                        team=team,
+                        mapping_type='auto',
+                    )
                     key = self._normalize_player_key(mapped_name, team)
                     logger.debug(f"Using name mapping: '{player_name}' -> '{mapped_name}'")
             

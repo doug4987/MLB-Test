@@ -31,6 +31,7 @@ class MLBPropsDatabase:
             self._create_scrape_sessions_table(conn)
             self._create_bet_results_table(conn)
             self._create_box_scores_table(conn)
+            self._create_player_name_mapping_table(conn)
             self._create_indexes(conn)
             logger.info("Database initialized successfully")
     
@@ -270,6 +271,20 @@ class MLBPropsDatabase:
                 
                 -- Constraints
                 UNIQUE(game_id, player_name, team, game_date)
+            )
+        """)
+
+    def _create_player_name_mapping_table(self, conn):
+        """Create player name mapping table"""
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS player_name_mapping (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                betting_name TEXT NOT NULL,
+                mlb_name TEXT NOT NULL,
+                team TEXT,
+                mapping_type TEXT DEFAULT 'manual',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(betting_name, mlb_name, team)
             )
         """)
     
@@ -734,7 +749,7 @@ class MLBPropsDatabase:
     def get_player_box_score(self, player_name: str, game_date: date, team: str = None) -> Optional[Dict]:
         """Get box score for a specific player on a specific date"""
         query = """
-            SELECT * FROM box_scores 
+            SELECT * FROM box_scores
             WHERE player_name = ? AND game_date = ?
         """
         params = [player_name, game_date]
@@ -747,6 +762,36 @@ class MLBPropsDatabase:
             cursor = conn.execute(query, params)
             result = cursor.fetchone()
             return dict(result) if result else None
+
+    def add_player_name_mapping(self, betting_name: str, mlb_name: str,
+                                team: str = None, mapping_type: str = 'manual'):
+        """Insert or update a player name mapping"""
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                    INSERT OR REPLACE INTO player_name_mapping
+                    (betting_name, mlb_name, team, mapping_type)
+                    VALUES (?, ?, ?, ?)
+                """,
+                (betting_name, mlb_name, team, mapping_type),
+            )
+
+    def get_mlb_name_for_betting_name(self, betting_name: str, team: str = None) -> Optional[str]:
+        """Lookup MLB name for a betting name"""
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                """
+                    SELECT mlb_name
+                    FROM player_name_mapping
+                    WHERE lower(betting_name) = lower(?)
+                      AND (team = ? OR team IS NULL)
+                    ORDER BY team DESC
+                    LIMIT 1
+                """,
+                (betting_name, team),
+            )
+            row = cursor.fetchone()
+            return row[0] if row else None
     
     def get_completed_games_without_box_scores(self, target_date: date) -> List[str]:
         """Get list of completed games that don't have box scores yet"""
