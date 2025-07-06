@@ -23,6 +23,8 @@ class MLBBoxScoreScraper:
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         })
+        # Cache for team ID to abbreviation lookups to minimize API calls
+        self.team_cache: Dict[int, str] = {}
     
     def collect_box_scores_for_date(self, target_date: date, force_update: bool = False) -> Dict[str, Any]:
         """Collect box scores for all completed games on a specific date"""
@@ -729,22 +731,31 @@ class MLBBoxScoreScraper:
             return games  # Return all games if filtering fails
     
     def _get_team_abbreviation(self, team_id: int) -> str:
-        """Get team abbreviation from team ID using MLB API"""
+        """Get team abbreviation from team ID using MLB API with caching"""
         try:
+            # Return from cache if available
+            if team_id in self.team_cache:
+                return self.team_cache[team_id]
+
             url = f"https://statsapi.mlb.com/api/v1/teams/{team_id}"
             response = self.session.get(url, timeout=5)
             response.raise_for_status()
-            
+
             data = response.json()
             teams = data.get('teams', [])
-            
+
             if teams:
-                return teams[0].get('abbreviation', '')
-            
+                abbr = teams[0].get('abbreviation', '')
+                # Store result in cache for future lookups
+                self.team_cache[team_id] = abbr
+                return abbr
+
+            self.team_cache[team_id] = ''
             return ''
-            
+
         except Exception as e:
             logger.debug(f"Failed to get abbreviation for team {team_id}: {e}")
+            self.team_cache[team_id] = ''
             return ''
 
 
