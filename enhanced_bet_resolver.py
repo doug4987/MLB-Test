@@ -86,36 +86,42 @@ class EnhancedBetResolver:
     def _create_box_score_lookup(self, box_scores: List[Dict]) -> Dict[str, Dict]:
         """Create efficient lookup dictionary for box scores"""
         lookup = {}
-        
+
+        # Retrieve all player name mappings once to avoid repeated DB queries
+        with self.db.get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT mlb_name, betting_name FROM player_name_mapping"
+            )
+            mapping_rows = cursor.fetchall()
+
+        mappings = {}
+        for row in mapping_rows:
+            mlb = row["mlb_name"]
+            bet_name = row["betting_name"]
+            mappings.setdefault(mlb, []).append(bet_name)
+
         for score in box_scores:
             player_name = score['player_name']
             team = score['team']
-            
+
             # Create normalized key for original name
             key = self._normalize_player_key(player_name, team)
-            
+
             if key not in lookup:
                 lookup[key] = []
-            
+
             lookup[key].append(score)
-            
+
             # Also create entries for any betting names that map to this MLB name
             # This allows reverse lookup from betting name to box score
-            with self.db.get_connection() as conn:
-                cursor = conn.execute("""
-                    SELECT betting_name FROM player_name_mapping 
-                    WHERE mlb_name = ?
-                """, (player_name,))
-                
-                for mapping_row in cursor.fetchall():
-                    betting_name = mapping_row[0]
-                    betting_key = self._normalize_player_key(betting_name, team)
-                    
-                    if betting_key not in lookup:
-                        lookup[betting_key] = []
-                    
-                    lookup[betting_key].append(score)
-        
+            for betting_name in mappings.get(player_name, []):
+                betting_key = self._normalize_player_key(betting_name, team)
+
+                if betting_key not in lookup:
+                    lookup[betting_key] = []
+
+                lookup[betting_key].append(score)
+
         return lookup
     
     def _get_mapped_player_name(self, betting_name: str, team: str) -> str:
