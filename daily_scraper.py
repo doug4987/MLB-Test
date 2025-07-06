@@ -163,14 +163,14 @@ class DailyMLBScraper:
         tier_counts = {'A': 0, 'B': 0, 'C': 0, 'D': 0, 'None': 0}
         
         for record in data:
-            ev_tier = record.get('ev_tier_parsed', 'No data')
-            if 'Tier A' in ev_tier:
+            ev_tier = record.get('ev_tier_parsed')
+            if ev_tier == 'A':
                 tier_counts['A'] += 1
-            elif 'Tier B' in ev_tier:
+            elif ev_tier == 'B':
                 tier_counts['B'] += 1
-            elif 'Tier C' in ev_tier:
+            elif ev_tier == 'C':
                 tier_counts['C'] += 1
-            elif 'Tier D' in ev_tier:
+            elif ev_tier == 'D':
                 tier_counts['D'] += 1
             else:
                 tier_counts['None'] += 1
