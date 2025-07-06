@@ -670,6 +670,149 @@ class MLBPropsDatabase:
         with self.get_connection() as conn:
             cursor = conn.execute(query, params)
             return [dict(row) for row in cursor.fetchall()]
+
+    def get_daily_bet_results_summary(self, target_date: date) -> Dict[str, Any]:
+        """Return summary of bet results for a specific date including P/L"""
+
+        def parse_odds(odds_string: str) -> Optional[int]:
+            if not odds_string or odds_string.strip() == "":
+                return None
+            match = re.search(r"\(([+-]\d+)\)", odds_string)
+            if match:
+                try:
+                    return int(match.group(1))
+                except ValueError:
+                    return None
+            match = re.search(r"^([+-]\d+)$", odds_string.strip())
+            if match:
+                try:
+                    return int(match.group(1))
+                except ValueError:
+                    return None
+            return None
+
+        def calculate_suggested_stake(odds_value: int) -> Optional[float]:
+            if odds_value is None:
+                return None
+            if odds_value > 0:
+                if 100 <= odds_value <= 250:
+                    return 100.0
+                if 250 < odds_value <= 500:
+                    return 50.0
+                if 500 < odds_value <= 750:
+                    return 25.0
+                if odds_value > 750:
+                    return 15.0
+                return 100.0
+            if odds_value < 0:
+                return float(abs(odds_value))
+            return None
+
+        def calculate_profit_loss(odds_value: int, stake: float, bet_won: bool) -> Optional[float]:
+            if odds_value is None or stake is None or bet_won is None:
+                return None
+            if bet_won:
+                if odds_value > 0:
+                    return (odds_value / 100) * stake
+                return (100 / abs(odds_value)) * stake
+            return -stake
+
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT
+                    br.expected_value_tier,
+                    br.suggested_bet,
+                    br.over_line,
+                    br.under_line,
+                    br.over_result,
+                    br.under_result
+                FROM bet_results br
+                JOIN props p ON br.prop_id = p.id
+                WHERE p.scrape_date = ?
+            """,
+                (target_date,),
+            )
+
+            rows = [dict(row) for row in cursor.fetchall()]
+
+        total_bets = 0
+        wins = 0
+        losses = 0
+        pushes = 0
+        total_staked = 0.0
+        total_profit_loss = 0.0
+        tier_data: Dict[str, Dict[str, Any]] = {}
+
+        for row in rows:
+            suggested_bet = row.get("suggested_bet")
+            if suggested_bet not in ("OVER", "UNDER"):
+                continue
+            odds_str = row["over_line"] if suggested_bet == "OVER" else row["under_line"]
+            result = row["over_result"] if suggested_bet == "OVER" else row["under_result"]
+            odds_value = parse_odds(odds_str)
+            stake = calculate_suggested_stake(odds_value)
+            if stake is None:
+                continue
+            bet_push = result == "push"
+            bet_won = result == "win"
+            profit_loss = 0.0 if bet_push else calculate_profit_loss(odds_value, stake, bet_won)
+
+            tier = row.get("expected_value_tier", "?")
+            data = tier_data.setdefault(
+                tier,
+                {
+                    "tier": tier,
+                    "total_bets": 0,
+                    "wins": 0,
+                    "losses": 0,
+                    "pushes": 0,
+                    "total_staked": 0.0,
+                    "total_profit_loss": 0.0,
+                },
+            )
+
+            data["total_bets"] += 1
+            if bet_won:
+                wins += 1
+                data["wins"] += 1
+            elif bet_push:
+                pushes += 1
+                data["pushes"] += 1
+            else:
+                losses += 1
+                data["losses"] += 1
+
+            total_bets += 1
+            total_staked += stake
+            total_profit_loss += profit_loss
+            data["total_staked"] += stake
+            data["total_profit_loss"] += profit_loss
+
+        summary = {
+            "total_bets": total_bets,
+            "wins": wins,
+            "losses": losses,
+            "pushes": pushes,
+            "win_rate": round((wins / total_bets) * 100, 1) if total_bets else 0,
+            "push_rate": round((pushes / total_bets) * 100, 1) if total_bets else 0,
+            "total_staked": round(total_staked, 2),
+            "total_profit_loss": round(total_profit_loss, 2),
+            "overall_roi": round((total_profit_loss / total_staked) * 100, 1) if total_staked else 0,
+        }
+
+        tier_breakdown = []
+        for tier in sorted(tier_data.keys()):
+            t = tier_data[tier]
+            t["win_rate"] = round((t["wins"] / t["total_bets"]) * 100, 1) if t["total_bets"] else 0
+            t["roi"] = round((t["total_profit_loss"] / t["total_staked"]) * 100, 1) if t["total_staked"] else 0
+            t["total_staked"] = round(t["total_staked"], 2)
+            t["total_profit_loss"] = round(t["total_profit_loss"], 2)
+            tier_breakdown.append(t)
+
+        summary["tier_breakdown"] = tier_breakdown
+
+        return summary
     
     def insert_box_score_data(self, box_scores: List[Dict]) -> int:
         """Insert box score data into database"""

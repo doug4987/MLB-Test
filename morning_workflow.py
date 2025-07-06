@@ -283,6 +283,16 @@ class MorningWorkflow:
             best_props_created = workflow_results.get('best_props_creation', {}).get('best_props_created', 0)
             box_scores_collected = workflow_results.get('box_score_collection', {}).get('players_collected', 0)
             bets_resolved = workflow_results.get('bet_resolution', {}).get('total_resolved', 0)
+
+            # Get yesterday's bet results summary
+            results_summary = self.db.get_daily_bet_results_summary(yesterday)
+            wins = results_summary.get('wins', 0)
+            losses = results_summary.get('losses', 0)
+            pushes = results_summary.get('pushes', 0)
+            win_rate = results_summary.get('win_rate', 0)
+            total_staked = results_summary.get('total_staked', 0.0)
+            profit_loss = results_summary.get('total_profit_loss', 0.0)
+            overall_roi = results_summary.get('overall_roi', 0.0)
             
             # Get betting recommendations
             recommendations = workflow_results.get('betting_recommendations', {})
@@ -309,6 +319,8 @@ class MorningWorkflow:
                     'box_scores_collected': box_scores_collected,
                     'bets_resolved': bets_resolved
                 },
+
+                'yesterdays_results': results_summary,
                 
                 # Action Items
                 'action_items': {
@@ -330,6 +342,26 @@ class MorningWorkflow:
             logger.info(f"🥈 Tier C bets (GOOD): {tier_c_count}")
             logger.info(f"📊 Box scores from {yesterday}: {box_scores_collected}")
             logger.info(f"🎲 Bets resolved from {yesterday}: {bets_resolved}")
+            logger.info(
+                f"🏅 Yesterday's results: {wins}W-{losses}L-{pushes}P (Win rate {win_rate:.1f}%)"
+            )
+            logger.info(
+                f"💰 P/L: ${profit_loss:+.0f} from ${total_staked:.0f} staked (ROI {overall_roi:+.1f}%)"
+            )
+
+            for tier_data in results_summary.get('tier_breakdown', []):
+                tier = tier_data.get('tier')
+                t_total = tier_data.get('total_bets', 0)
+                t_wins = tier_data.get('wins', 0)
+                t_losses = tier_data.get('losses', 0)
+                t_pushes = tier_data.get('pushes', 0)
+                rate = round(t_wins / t_total * 100, 1) if t_total else 0
+                staked = tier_data.get('total_staked', 0)
+                pl = tier_data.get('total_profit_loss', 0)
+                roi = tier_data.get('roi', 0)
+                logger.info(
+                    f"   Tier {tier}: {t_wins}W-{t_losses}L-{t_pushes}P out of {t_total} ({rate:.1f}% win) P/L ${pl:+.0f} on ${staked:.0f} (ROI {roi:+.1f}%)"
+                )
             
             if tier_a_count > 0 or tier_b_count > 0 or tier_c_count > 0:
                 logger.info(f"🎯 ACTION: Check {recommendations.get('export_file')} for today's best bets!")
