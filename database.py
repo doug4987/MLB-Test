@@ -6,6 +6,7 @@ Handles daily data storage and bet result tracking
 import sqlite3
 import json
 import logging
+import re
 from datetime import datetime, date
 from typing import List, Dict, Optional, Any
 import os
@@ -605,20 +606,27 @@ class MLBPropsDatabase:
     def _calculate_bet_results(self, actual_result: float, over_line: str, under_line: str) -> tuple:
         """Calculate whether over/under bets won, lost, or pushed"""
         try:
-            # Extract numeric line from string like "2.5 (-110)"
-            over_num = float(over_line.split()[0]) if over_line else None
-            under_num = float(under_line.split()[0]) if under_line else None
-            
-            if over_num is None:
+            def parse_line(value: str) -> Optional[float]:
+                if not value:
+                    return None
+                match = re.search(r"-?\d+(?:\.\d+)?", value)
+                return float(match.group()) if match else None
+
+            over_num = parse_line(over_line)
+            under_num = parse_line(under_line)
+
+            line_value = over_num if over_num is not None else under_num
+
+            if line_value is None:
                 return 'unknown', 'unknown'
-            
-            if actual_result > over_num:
+
+            if actual_result > line_value:
                 return 'win', 'loss'
-            elif actual_result < over_num:
+            elif actual_result < line_value:
                 return 'loss', 'win'
             else:
                 return 'push', 'push'
-                
+
         except Exception as e:
             logger.error(f"Error calculating bet results: {e}")
             return 'error', 'error'
