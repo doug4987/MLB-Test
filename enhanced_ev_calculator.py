@@ -27,8 +27,13 @@ class EnhancedEVCalculator:
         if not odds_string or odds_string.strip() == '':
             return None
             
-        # Clean the odds string
-        odds_clean = odds_string.strip().replace('(', '').replace(')', '')
+        # First check for odds inside parentheses like "2.5 (-110)"
+        match = re.search(r'\(([+-]?\d+)\)', odds_string)
+        if match:
+            odds_clean = match.group(1)
+        else:
+            # Clean the odds string
+            odds_clean = odds_string.strip().replace('(', '').replace(')', '')
         
         # Handle American odds format (+150, -110, etc.)
         if odds_clean.startswith(('+', '-')):
@@ -222,6 +227,10 @@ class EnhancedEVCalculator:
 def test_ev_calculator():
     """Test the EV calculator with our examples"""
     calc = EnhancedEVCalculator()
+
+    # Unit-style tests for parse_odds
+    assert abs(calc.parse_odds("2.5 (-110)") - (110 / 210)) < 1e-6
+    assert abs(calc.parse_odds("(-105)") - (105 / 205)) < 1e-6
     
     print("🧮 TESTING ENHANCED EV CALCULATOR")
     print("=" * 50)
