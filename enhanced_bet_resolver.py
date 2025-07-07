@@ -150,8 +150,16 @@ class EnhancedBetResolver:
             
             # Try to find matching box score - first with original name, then with mapped name
             key = self._normalize_player_key(player_name, team)
+            logger.debug(
+                f"Lookup key '{key}' generated for {player_name} ({team})"
+            )
 
-            if key not in box_score_lookup:
+            found = key in box_score_lookup
+            logger.debug(
+                f"Box score {'found' if found else 'not found'} for key '{key}'"
+            )
+
+            if not found:
                 # Try using name mapping
                 mapped_name = self._get_mapped_player_name(player_name, team)
                 if mapped_name != player_name:
@@ -163,10 +171,20 @@ class EnhancedBetResolver:
                         mapping_type='auto',
                     )
                     key = self._normalize_player_key(mapped_name, team)
-                    logger.debug(f"Using name mapping: '{player_name}' -> '{mapped_name}'")
-            
-            if key not in box_score_lookup:
-                logger.debug(f"No box score found for {player_name} ({team}) or mapped name")
+                    logger.debug(
+                        f"Using name mapping: '{player_name}' -> '{mapped_name}', key '{key}'"
+                    )
+
+                found = key in box_score_lookup
+                logger.debug(
+                    f"Box score {'found' if found else 'not found'} for key '{key}'"
+                )
+
+            if not found:
+                logger.debug(
+                    f"No box score found for key '{key}' "+
+                    f"(player='{player_name}', team='{team}')"
+                )
                 return False
             
             # Get the player's box score (there should only be one for a given date)
