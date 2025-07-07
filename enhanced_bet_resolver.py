@@ -223,7 +223,7 @@ class EnhancedBetResolver:
         elif 'single' in market_lower:
             return float(box_score.get('singles', 0))
             
-        elif 'walk' in market_lower or 'base on balls' in market_lower:
+        elif ('walk' in market_lower and 'allowed' not in market_lower) or 'base on balls' in market_lower:
             return float(box_score.get('walks', 0))
             
         elif 'strikeout' in market_lower and 'pitcher' not in market_lower:
@@ -251,7 +251,7 @@ class EnhancedBetResolver:
         elif 'strikeout' in market_lower and ('pitcher' in market_lower or 'pitching' in market_lower):
             return float(box_score.get('strikeouts_pitched', 0))
             
-        elif 'earned run' in market_lower or 'er' in market_lower:
+        elif 'earned run' in market_lower or re.search(r"\ber\b", market, re.IGNORECASE):
             return float(box_score.get('earned_runs', 0))
             
         elif 'hits allowed' in market_lower:
