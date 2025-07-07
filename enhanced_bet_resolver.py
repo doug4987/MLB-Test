@@ -136,8 +136,10 @@ class EnhancedBetResolver:
         name = re.sub(r'\s+(jr\.?|sr\.?|iii?|iv)$', '', name)
         name = re.sub(r'[^\w\s]', '', name)  # Remove punctuation
         name = re.sub(r'\s+', ' ', name)     # Normalize whitespace
-        
-        return f"{name}_{team.upper()}"
+
+        team_abbr = self.db.normalize_team_abbreviation(team)
+
+        return f"{name}_{team_abbr}"
     
     def _resolve_single_bet(self, bet: Dict, box_score_lookup: Dict[str, Dict]) -> bool:
         """Resolve a single bet using box score data"""

@@ -12,6 +12,43 @@ from typing import List, Dict, Optional, Any
 import os
 from contextlib import contextmanager
 
+# Mapping of alternate team abbreviations to a single
+# normalized three-letter form. This keeps team values
+# consistent between the props table (scraped data) and
+# box scores (MLB/ESPN APIs).
+TEAM_ABBR_NORMALIZATION = {
+    "ARI": "ARI", "ARZ": "ARI", "AZ": "ARI",
+    "ATL": "ATL",
+    "BAL": "BAL",
+    "BOS": "BOS",
+    "CHC": "CHC",
+    "CWS": "CHW", "CHW": "CHW",
+    "CIN": "CIN",
+    "CLE": "CLE",
+    "COL": "COL",
+    "DET": "DET",
+    "HOU": "HOU",
+    "KC": "KCR", "KCR": "KCR",
+    "LAA": "LAA",
+    "LAD": "LAD",
+    "MIA": "MIA",
+    "MIL": "MIL",
+    "MIN": "MIN",
+    "NYM": "NYM",
+    "NYY": "NYY",
+    "OAK": "OAK",
+    "PHI": "PHI",
+    "PIT": "PIT",
+    "SD": "SDP", "SDP": "SDP",
+    "SEA": "SEA",
+    "SF": "SFG", "SFG": "SFG",
+    "STL": "STL",
+    "TB": "TBR", "TBR": "TBR",
+    "TEX": "TEX",
+    "TOR": "TOR",
+    "WSH": "WSH", "WAS": "WSH", "WSN": "WSH",
+}
+
 logger = logging.getLogger(__name__)
 
 
@@ -21,6 +58,13 @@ class MLBPropsDatabase:
     def __init__(self, db_path: str = "mlb_props.db"):
         self.db_path = db_path
         self.init_database()
+
+    def normalize_team_abbreviation(self, abbr: str) -> str:
+        """Return normalized 3-letter team abbreviation"""
+        if not abbr:
+            return ""
+        abbr = abbr.upper().strip()
+        return TEAM_ABBR_NORMALIZATION.get(abbr, abbr)
     
     def init_database(self):
         """Initialize database with all required tables"""
@@ -379,7 +423,7 @@ class MLBPropsDatabase:
                         game_info['home_team'],
                         game_info['away_team'],
                         prop.get('PLAYER', ''),
-                        prop.get('TM', ''),
+                        self.normalize_team_abbreviation(prop.get('TM', '')),
                         prop.get('POSITION', ''),
                         batting_order,
                         prop.get('SITE', ''),
@@ -405,9 +449,14 @@ class MLBPropsDatabase:
                     # Insert game if not exists
                     if game_info['game_id']:
                         self._insert_game_if_not_exists(conn, game_info, prop.get('DATE', ''), prop.get('TIME', ''))
-                    
+
                     # Insert player if not exists
-                    self._insert_player_if_not_exists(conn, prop.get('PLAYER', ''), prop.get('TM', ''), prop.get('POSITION', ''))
+                    self._insert_player_if_not_exists(
+                        conn,
+                        prop.get('PLAYER', ''),
+                        self.normalize_team_abbreviation(prop.get('TM', '')),
+                        prop.get('POSITION', '')
+                    )
                     
                     inserted_count += 1
                     
@@ -423,13 +472,13 @@ class MLBPropsDatabase:
         """Parse game string like 'LAD@COL' into components"""
         if '@' in game_str:
             parts = game_str.split('@')
-            away_team = parts[0].strip()
-            home_team = parts[1].strip()
+            away_team = self.normalize_team_abbreviation(parts[0].strip())
+            home_team = self.normalize_team_abbreviation(parts[1].strip())
             game_id = f"{away_team}@{home_team}"
         else:
             away_team = ''
             home_team = ''
-            game_id = game_str
+            game_id = self.normalize_team_abbreviation(game_str)
         
         return {
             'game_id': game_id,
@@ -500,8 +549,8 @@ class MLBPropsDatabase:
             game_info['game_id'],
             date_str,
             time_str,
-            game_info['home_team'],
-            game_info['away_team']
+            self.normalize_team_abbreviation(game_info['home_team']),
+            self.normalize_team_abbreviation(game_info['away_team'])
         ))
     
     def _insert_player_if_not_exists(self, conn, player_name: str, team: str, position: str):
@@ -510,7 +559,7 @@ class MLBPropsDatabase:
             conn.execute("""
                 INSERT OR IGNORE INTO players (player_name, team, position)
                 VALUES (?, ?, ?)
-            """, (player_name, team, position))
+            """, (player_name, self.normalize_team_abbreviation(team), position))
     
     def get_daily_summary(self, scrape_date: date) -> Dict[str, Any]:
         """Get summary of daily scrape data"""
